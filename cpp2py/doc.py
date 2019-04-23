@@ -5,30 +5,7 @@
 import re
 import cpp2py.clang_parser as CL
 import util
-
-def replace_latex(s, escape_slash=False):
-    """replace 
-       $XX X$  by :math:`XX X`
-       $$X XX$$  by \n\n.. math:\n\t\tX XX\n\n..\n
-       [[ XXX]]  by :ref:` XXX`
-     
-     """
-    any_math_char = 'A-Za-z0-9{}\[\],;|\(\)=./\/+-_^\'' #any math character
-    #matches all expressions starting and ending with any math char, with possibly whitespaces in between
-    pattern_1 = '\$(['+any_math_char+']['+any_math_char+' ]*['+any_math_char+']+)\$'
-    #matches any single math char
-    pattern_2 = '\$(['+any_math_char+'])\$'
-    #out of line formula
-    text=re.sub('\$'+pattern_1+'\$', r'\n\n.. math::\n\t\t\1\n\n..\n', s)
-    text=re.sub('\$'+pattern_2+'\$', r'\n\n.. math::\n\t\t\1\n\n..\n', text)
-    #inline formula
-    text=re.sub(pattern_1, r':math:`\1`', text)
-    text=re.sub(pattern_2, r':math:`\1`', text)
-    #to create a hyperlink
-    text=re.sub('\[\[([A-Za-z0-9{}\(,\)=./\/+-_]+)\]\]', r':ref:`\1`', text)
-
-    if escape_slash: text=text.encode('string_escape')
-    return text
+from processed_doc import ProcessedDoc
 
 def make_table(list_of_list):
     """
@@ -43,24 +20,6 @@ def make_table(list_of_list):
     r = [sep]
     for li in list_of_list: r += [form.format(*li), sep] 
     return '\n'.join(r) + '\n'
-
-def process_doc(doc):
-    if not doc : return ""
-    for p in ["/\*","\*/","^\s*\*", "///", "//", r"\\brief"] : 
-        doc = re.sub(p,"",doc,flags = re.MULTILINE)
-    doc = doc.strip()
-    doc = replace_latex(doc, True)
-    return doc
-
-
-def replace_cpp_keywords_by_py_keywords(s):
-    """replace syntax 
-       @param XXX blabla 
-       by
-       :param XXX: blabla
-    """
-    s=re.sub('@param ([A-Za-z0-9_]*) ',r':param \1: ', s)
-    return s
 
 def treat_member_list(member_list) : 
     class _m:
@@ -89,23 +48,13 @@ def treat_member_list(member_list) :
       member_list2.append(mm)
     return member_list2
 
-def doc_format_param(member_list):
-   member_list2 = treat_member_list(member_list)
-   h = ['Parameter Name','Type','Default', 'Documentation']
-   l = [(m.spelling,m.ctype, m.initializer.replace("res.",""), m.doc) for m in member_list2]
-   return make_table(h, l)
+# FIXME : Obsolete. This is used for generate an rst file which is redundant.
+def doc_param_dict_format(member_list) :
+    """
+       member_list : list of the node of the members of a struct
 
-def make_doc(node):
-    """ process doc of node"""
-    
-    doc = process_doc(node.raw_comment)
-    if util.use_parameter_class(node):
-        doc = doc + '\n' + doc_format_param(CL.get_members(util.get_decl_param_class(node), True))
-    
-    return replace_latex(replace_cpp_keywords_by_py_keywords(doc))
-    
-
-def doc_param_dict_format(member_list) : 
+       returns the rst table
+    """
     member_list2 = treat_member_list(member_list)
     h= ['Parameter Name', 'Type', 'Default', 'Documentation']
     n_lmax = max(len(h[0]), max(len(m.spelling) for m in member_list2))
@@ -122,5 +71,41 @@ def doc_param_dict_format(member_list) :
     r = '\n'.join(lines)
     return sep2 + '\n' + header +'\n' + sep1 + '\n' + r 
 
+def decal(s, shift = 5):
+    sep = shift * ' '
+    return '\n'.join( (sep + x.strip()) for x in s.split('\n'))
 
+def make_doc_function(node):
+    """ Makes the doc of the node node"""
 
+    # first case : it is a dict function
+    # FIXME : to be improved, what do we want ?
+    if util.use_parameter_class(node):
+        member_list = CL.get_members(util.get_decl_param_class(node), True)
+        member_list2 = treat_member_list(member_list)
+        h = ['Parameter Name','Type','Default', 'Documentation']
+        l = [(m.spelling,m.ctype, m.initializer.replace("res.",""), m.doc) for m in member_list2]
+        table =  make_table(h, l)
+        doc = doc + '\n' + table
+        return doc
+    
+    # General case
+    p = ProcessedDoc(node) # general treatment and analysis, common with cpp2rst
+
+    doc = "%s\n\n%s\n"%(p.brief_doc, p.doc)
+   
+    params = p.elements['params'] # parameters of the function
+    if params:
+        doc += "Parameters\n----------\n"
+       for p in params:
+           name, comment = (p + '  ').split(' ',1)
+           doc += "%s \n%s\n"%(name, decal(comment))
+
+    if p.elements['return']:
+        _type = '' # FIXME : deduce the type ?
+        doc += "Returns\n-------\n%s\n%s"(_type, decal(comment))
+    
+    return doc
+ 
+def make_doc(node) : 
+    return node.raw_comment

@@ -48,7 +48,7 @@ c.add_member(c_name = "${m.spelling}",
 %endfor
 ##
 %for m in CL.get_constructors(c, W.keep_fnt):
-c.add_constructor("""${W.make_signature_for_desc(m, True)}""", doc = """${doc.make_doc(m)}""")
+c.add_constructor("""${W.make_signature_for_desc(m, True)}""", doc = """${doc.make_doc_function(m)}""")
 
 %endfor
 ##
@@ -57,7 +57,7 @@ c.add_method("""${W.make_signature_for_desc(m)}""",
              %if m.is_static_method() :
              is_static = True,
              %endif
-             doc = """${doc.make_doc(m)}""")
+             doc = """${doc.make_doc_function(m)}""")
 
 %endfor
 ##
@@ -76,7 +76,7 @@ module.add_class(c)
 %endfor
 ##
 %for f in W.all_functions:
-module.add_function ("${W.make_signature_for_desc(f, is_free_function = True)}", doc = """${doc.make_doc(f)}""")
+module.add_function ("${W.make_signature_for_desc(f, is_free_function = True)}", doc = """${doc.make_doc_function(f)}""")
 
 %endfor
 
